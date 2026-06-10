@@ -93,7 +93,7 @@ class GalleryLoader {
     `;
     
     const grid = dayGroup.querySelector('.gallery-grid');
-    const imagesToShow = images.slice(0, IMAGES_PER_DAY);
+    const imagesToShow = images;
     
     imagesToShow.forEach(url => {
       const item = document.createElement('div');
