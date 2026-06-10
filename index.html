@@ -1,1 +1,25 @@
-<B>hello,world</B>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic Picture Gallery</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Daily Picture Gallery</h1>
+    <div class="date-navigation">
+      <button id="prev-day" class="nav-btn">← Previous Day</button>
+      <span id="current-date" class="current-date"></span>
+      <button id="next-day" class="nav-btn">Next Day →</button>
+    </div>
+  </header>
+  
+  <div id="gallery-container">
+    <div class="loading-indicator">Loading gallery...</div>
+  </div>
+  
+  <script src="gallery.js"></script>
+</body>
+</html>
