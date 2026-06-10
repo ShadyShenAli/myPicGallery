@@ -98,7 +98,7 @@ class GalleryLoader {
     imagesToShow.forEach(url => {
       const item = document.createElement('div');
       item.className = 'gallery-item';
-      item.innerHTML = `<img src="${url}" alt="Gallery image" loading="lazy" referrerPolicy="no-referrer">`;
+      item.innerHTML = `<img src="https://i0.wp.com/${url.replace("https://","")}" alt="Gallery image" loading="lazy" referrerPolicy="no-referrer">`;
       item.onclick = () => window.open(url, '_blank');
       grid.appendChild(item);
     });
