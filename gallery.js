@@ -1,131 +1,150 @@
 const JSON_DIR = 'picJsons';
+const IMAGES_PER_DAY = 9;
+const MAX_DAYS_BACK = 30;
 
-function getJsonFilename(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}${month}${day}.json`;
-}
-
-async function fetchGalleryData(filename) {
-  try {
-    const response = await fetch(`./${JSON_DIR}/${filename}`, {
-      cache: 'no-cache',
-      headers: { 'Cache-Control': 'no-cache' }
-    });
-    
-    if (!response.ok) throw new Error(`File not found: ${filename}`);
-    return await response.json();
-  } catch (error) {
-    console.warn(`Failed to load ${filename}:`, error.message);
-    return null;
-  }
-}
-
-async function findLatestGalleryData(currentDate = new Date()) {
-  const maxDaysBack = 7;
-  
-  for (let i = 0; i < maxDaysBack; i++) {
-    const checkDate = new Date(currentDate);
-    checkDate.setDate(checkDate.getDate() - i);
-    
-    const filename = getJsonFilename(checkDate);
-    const galleryData = await fetchGalleryData(filename);
-    
-    if (galleryData) {
-      console.log(`Loaded gallery data from ${filename}`);
-      return galleryData;
-    }
-  }
-  
-  console.log('Using default gallery data');
-  return await fetchGalleryData('default.json');
-}
-
-class LazyGalleryLoader {
+class GalleryLoader {
   constructor() {
-    this.currentPage = 1;
-    this.isLoading = false;
-    this.allImages = [];
     this.container = document.getElementById('gallery-container');
-    this.loadingIndicator = document.createElement('div');
-    this.loadingIndicator.className = 'loading-indicator';
-    this.loadingIndicator.textContent = 'Loading more images...';
+    this.sentinel = document.getElementById('loading-sentinel');
+    this.currentDate = new Date();
+    this.earliestLoadedDate = null;
+    this.isLoading = false;
+    this.allDaysData = [];
   }
 
   async initialize() {
-    const galleryData = await findLatestGalleryData();
+    const today = new Date();
+    const initialData = await this.findLatestGalleryData(today);
     
-    if (galleryData?.images?.length) {
-      this.allImages = galleryData.images;
-      this.renderInitialImages();
-      this.setupInfiniteScroll();
+    if (initialData) {
+      this.renderDay(initialData.date, initialData.images);
+      this.earliestLoadedDate = initialData.date;
+      this.allDaysData.push(initialData);
     } else {
       this.showError('No gallery data available');
+      return;
+    }
+
+    this.setupInfiniteScroll();
+  }
+
+  async findLatestGalleryData(fromDate) {
+    for (let i = 0; i < MAX_DAYS_BACK; i++) {
+      const checkDate = new Date(fromDate);
+      checkDate.setDate(checkDate.getDate() - i);
+      
+      const filename = this.getJsonFilename(checkDate);
+      const images = await this.fetchImageUrls(filename);
+      
+      if (images && images.length > 0) {
+        return {
+          date: checkDate,
+          images: images
+        };
+      }
+    }
+    
+    const defaultImages = await this.fetchImageUrls('default.json');
+    if (defaultImages && defaultImages.length > 0) {
+      return {
+        date: new Date(),
+        images: defaultImages
+      };
+    }
+    
+    return null;
+  }
+
+  async fetchImageUrls(filename) {
+    try {
+      const response = await fetch(`./${JSON_DIR}/${filename}`, {
+        cache: 'no-cache',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      
+      if (!response.ok) throw new Error(`File not found: ${filename}`);
+      return await response.json();
+    } catch (error) {
+      console.warn(`Failed to load ${filename}:`, error.message);
+      return null;
     }
   }
 
-  renderInitialImages() {
-    const imagesToShow = this.allImages.slice(0, 20);
-    this.renderImages(imagesToShow);
-  }
-
-  renderImages(images) {
-    const grid = document.getElementById('gallery-grid') || this.createGrid();
+  renderDay(date, images) {
+    const dayGroup = document.createElement('div');
+    dayGroup.className = 'day-group';
     
-    const newImages = images.map(image => `
-      <div class="gallery-item" onclick="window.open('${image.url}', '_blank')">
-        <img src="${image.thumbnail}" alt="${image.title}" loading="lazy">
-        <div class="image-info">
-          <h3>${image.title}</h3>
-          <p>${image.description}</p>
+    const dateStr = date.toISOString().split('T')[0];
+    const displayDate = date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    
+    dayGroup.innerHTML = `
+      <div class="day-separator">
+        <hr>
+        <div class="day-header">
+          <div>${displayDate}</div>
         </div>
       </div>
-    `).join('');
-    
-    if (this.currentPage === 1) {
-      grid.innerHTML = newImages;
-    } else {
-      grid.insertAdjacentHTML('beforeend', newImages);
-    }
-  }
-
-  createGrid() {
-    this.container.innerHTML = `
-      <div id="gallery-grid" class="gallery-grid"></div>
+      <div class="gallery-grid" data-date="${dateStr}"></div>
     `;
-    this.container.appendChild(this.loadingIndicator);
-    return document.getElementById('gallery-grid');
+    
+    const grid = dayGroup.querySelector('.gallery-grid');
+    const imagesToShow = images.slice(0, IMAGES_PER_DAY);
+    
+    imagesToShow.forEach(url => {
+      const item = document.createElement('div');
+      item.className = 'gallery-item';
+      item.innerHTML = `<img src="${url}" alt="Gallery image" loading="lazy">`;
+      item.onclick = () => window.open(url, '_blank');
+      grid.appendChild(item);
+    });
+    
+    this.container.appendChild(dayGroup);
   }
 
   setupInfiniteScroll() {
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting && !this.isLoading) {
-          this.loadMoreImages();
+          this.loadOlderDay();
         }
       });
-    }, { rootMargin: '100px' });
+    }, { rootMargin: '200px' });
 
-    observer.observe(this.loadingIndicator);
+    observer.observe(this.sentinel);
   }
 
-  async loadMoreImages() {
-    if (this.isLoading || this.currentPage * 20 >= this.allImages.length) {
-      this.loadingIndicator.style.display = 'none';
-      return;
-    }
-
-    this.isLoading = true;
-    const startIndex = this.currentPage * 20;
-    const endIndex = startIndex + 20;
-    const imagesToLoad = this.allImages.slice(startIndex, endIndex);
-
-    await new Promise(resolve => setTimeout(resolve, 500));
+  async loadOlderDay() {
+    if (this.isLoading || !this.earliestLoadedDate) return;
     
-    this.renderImages(imagesToLoad);
-    this.currentPage++;
+    this.isLoading = true;
+    const nextOlderDate = new Date(this.earliestLoadedDate);
+    nextOlderDate.setDate(nextOlderDate.getDate() - 1);
+    
+    const filename = this.getJsonFilename(nextOlderDate);
+    const images = await this.fetchImageUrls(filename);
+    
+    if (images && images.length > 0) {
+      this.renderDay(nextOlderDate, images);
+      this.earliestLoadedDate = nextOlderDate;
+      this.allDaysData.push({
+        date: nextOlderDate,
+        images: images
+      });
+    }
+    
     this.isLoading = false;
+  }
+
+  getJsonFilename(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}${month}${day}.json`;
   }
 
   showError(message) {
@@ -133,53 +152,8 @@ class LazyGalleryLoader {
   }
 }
 
-// Date navigation functionality
-let currentDisplayDate = new Date();
-
-function updateDateDisplay() {
-  document.getElementById('current-date').textContent = 
-    currentDisplayDate.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-}
-
-document.getElementById('prev-day').addEventListener('click', async () => {
-  currentDisplayDate.setDate(currentDisplayDate.getDate() - 1);
-  updateDateDisplay();
-  await loadGalleryForDate(currentDisplayDate);
-});
-
-document.getElementById('next-day').addEventListener('click', async () => {
-  const tomorrow = new Date(currentDisplayDate);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  
-  if (tomorrow <= new Date()) {
-    currentDisplayDate = tomorrow;
-    updateDateDisplay();
-    await loadGalleryForDate(currentDisplayDate);
-  }
-});
-
-async function loadGalleryForDate(date) {
-  const filename = getJsonFilename(date);
-  const galleryData = await fetchGalleryData(filename);
-  
-  if (galleryData) {
-    galleryLoader.allImages = galleryData.images;
-    galleryLoader.currentPage = 1;
-    galleryLoader.renderInitialImages();
-  } else {
-    alert('No gallery data available for this date');
-  }
-}
-
-// Initialize everything when DOM is loaded
-let galleryLoader;
+// Initialize the gallery when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-  updateDateDisplay();
-  galleryLoader = new LazyGalleryLoader();
-  galleryLoader.initialize();
+  const gallery = new GalleryLoader();
+  gallery.initialize();
 });
