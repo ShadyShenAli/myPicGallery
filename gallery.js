@@ -140,7 +140,7 @@ class GalleryLoader {
       this.earliestLoadedDate = nextOlderDate;
       this.isLoading = false;
       if ((new Date() - nextOlderDate)/24/3600000 < MAX_DAYS_BACK){
-        await loadOlderDay();
+        await this.loadOlderDay();
       }
     }
   }
