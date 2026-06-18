@@ -135,6 +135,8 @@ class GalleryLoader {
         date: nextOlderDate,
         images: images
       });
+    }else{
+      this.earliestLoadedDate = nextOlderDate;
     }
     
     this.isLoading = false;
