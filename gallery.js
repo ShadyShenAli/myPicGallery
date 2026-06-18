@@ -135,11 +135,14 @@ class GalleryLoader {
         date: nextOlderDate,
         images: images
       });
+      this.isLoading = false;
     }else{
       this.earliestLoadedDate = nextOlderDate;
+      this.isLoading = false;
+      if ((new Date() - nextOlderDate)/24/3600000 < MAX_DAYS_BACK){
+        await loadOlderDay();
+      }
     }
-    
-    this.isLoading = false;
   }
 
   getJsonFilename(date) {
